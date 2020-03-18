@@ -1,0 +1,47 @@
+hydra:
+  job_logging:
+#    formatters:
+#      simple:
+#        format: '[]'
+    root:
+      handlers: [file, console]  # logging to file only.
+  run:
+    #dir: logs/${dataset}
+    dir: logs/${dataset}
+
+# meta parameters
+dataset: cifar10
+data_dir: data
+classifier_name: resnet18 # or resnet34, resnet50
+n_classes: 10
+
+inference: False  # False for training, True for inference.
+
+# AdvMix options
+mixture_width: 3           # width of per augment chain
+mixture_depth: -1          # depth of augment chains.
+aug_severity: 3        # severity of augmentation operators.
+all_ops: False         # use all augment operations including the intersected with CIFAR10-C ones.
+no_jsd: False          # no Jason-Shannon Divergence loss.
+
+# training parameters
+n_epochs: 100
+batch_size: 128
+eval_batch_size: 200
+
+optimizer: sgd
+learning_rate: 0.1     # initial learning rate
+momentum: 0.9
+weight_decay: 0.0005   # L2 regularizer
+schedule: [150, 225]   # Decrease learning rate at these epochs.
+gamma: 0.1             # LR is multiplied by gamma on schedule.
+seed: 1234
+
+epsilon: 8/255
+epsilon_iter: 10/255
+pgd_epsilon_iter: 2/255  # for PGD evaluation
+
+# setting
+n_gpu: 1
+device: cuda
+num_workers: 0
