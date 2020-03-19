@@ -11,7 +11,11 @@ from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms, datasets
 import augmentations
 
-from utils import AverageMeter, get_model
+from third_party.ResNeXt_DenseNet.models.densenet import densenet
+from third_party.ResNeXt_DenseNet.models.resnext import resnext29
+from third_party.WideResNet_pytorch.wideresnet import WideResNet
+
+from utils import AverageMeter, cal_parameters
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
@@ -84,57 +88,69 @@ class AugMixDataset(Dataset):
         return len(self.dataset)
 
 
+def jason_shanon_loss(prob_list):
+    from functools import reduce
+    # Clamp mixture distribution to avoid exploding KL divergence
+    p_mix = reduce(lambda a, b: a + b, prob_list) / len(prob_list)
+    p_mix = p_mix.clamp(1e-7, 1.).log()
+
+    return reduce(lambda a, b: a + b, [F.kl_div(p_mix, p, reduction='batchmean') for p in prob_list]) / len(prob_list)
+
+
 def train_epoch(classifier, train_loader, args, optimizer, scheduler):
     """Train for one epoch."""
     classifier.train()
     loss_meter = AverageMeter('loss')
     ce_meter = AverageMeter('ce_loss')
     js_meter = AverageMeter('js_loss')
-    for i, (images, targets) in enumerate(train_loader):
+    acc_meter = AverageMeter('acc_loss')
+
+    for i, (x, y) in enumerate(train_loader):
         optimizer.zero_grad()
         if args.no_jsd:
-            images = images.to(args.device)
-            targets = targets.to(args.device)
-            logits = classifier(images)
-            loss = F.cross_entropy(logits, targets)
+            x = x.to(args.device)
+            y = y.to(args.device)
+            logits = classifier(x)
+            loss = F.cross_entropy(logits, y)
+
+            loss_meter.update(loss.item(), x[0].size(0))
+            acc = (logits_clean.argmax(dim=1) == y).float().mean().item()
+            acc_meter.update(acc, x[0].size(0))
         else:
-            images_all = torch.cat(images, 0).to(args.device)
-            targets = targets.to(args.device)
-            logits_all = classifier(images_all)
+            x_all = torch.cat(x, 0).to(args.device)
+            y = y.to(args.device)
+            logits_all = classifier(x_all)
             logits_clean, logits_aug1, logits_aug2 = torch.split(
-              logits_all, images[0].size(0))
+              logits_all, x[0].size(0))
 
             # Cross-entropy is only computed on clean images
-            ce_loss = F.cross_entropy(logits_clean, targets)
+            ce_loss = F.cross_entropy(logits_clean, y)
 
-            p_clean, p_aug1, p_aug2 = F.softmax(
-              logits_clean, dim=1), F.softmax(
-                  logits_aug1, dim=1), F.softmax(
-                      logits_aug2, dim=1)
+            p_clean = logits_clean.softmax(dim=1)
+            p_aug1 = logits_aug1.softmax(dim=1)
+            p_aug2 = logits_aug2.softmax(dim=1)
 
-            # Clamp mixture distribution to avoid exploding KL divergence
-            p_mixture = torch.clamp((p_clean + p_aug1 + p_aug2) / 3., 1e-7, 1).log()
-            js_loss = (F.kl_div(p_mixture, p_clean, reduction='batchmean') +
-                        F.kl_div(p_mixture, p_aug1, reduction='batchmean') +
-                        F.kl_div(p_mixture, p_aug2, reduction='batchmean')) / 3.
+            js_loss = jason_shanon_loss([p_clean, p_aug1, p_aug2])
 
             loss = ce_loss + 12 * js_loss
-            loss_meter.update(loss.item(), images[0].size(0))
-            ce_meter.update(ce_loss.item(), images[0].size(0))
-            js_meter.update(js_loss.item(), images[0].size(0))
+
+            loss_meter.update(loss.item(), x[0].size(0))
+            ce_meter.update(ce_loss.item(), x[0].size(0))
+            js_meter.update(js_loss.item(), x[0].size(0))
+            acc = (logits_clean.argmax(dim=1) == y).float().mean().item()
+            acc_meter.update(acc, x[0].size(0))
+
         loss.backward()
         optimizer.step()
         scheduler.step()
 
         # loss_ema = loss_ema * 0.9 + float(loss) * 0.1
-    return loss_meter.avg, ce_meter.avg, js_meter.avg
+    return loss_meter.avg, ce_meter.avg, js_meter.avg, acc_meter.avg
 
 
 # Note that we don't use cifar10 specific normalization, so generally use 0.5 as mean and std.
-
 mean_ = 0.5
 std_ = 0.5
-
 clip_min = -1.
 clip_max = 1.
 
@@ -173,7 +189,7 @@ def eval_c(classifier, test_data, base_path, args):
     for corruption in CORRUPTIONS:
         # Reference to original data is mutated
         test_data.data = np.load(base_path + corruption + '.npy')
-        test_data.targets = torch.LongTensor(np.load(base_path + 'labels.npy'))
+        test_data.y = torch.LongTensor(np.load(base_path + 'labels.npy'))
 
         test_loader = torch.utils.data.DataLoader(
             test_data,
@@ -238,7 +254,19 @@ def run(args: DictConfig) -> None:
         num_workers=args.num_workers,
         pin_memory=True)
 
-    classifier = get_model(args.classifier_name, args.n_classes).to(args.device)
+    # Create model
+    if args.model == 'densenet':
+        classifier = densenet(num_classes=args.n_classes)
+    elif args.model == 'wide_resnet':
+        n_layers = 40
+        widen_factor = 2
+        droprate = 0.
+        classifier = WideResNet(n_layers, args.n_classes, widen_factor, droprate)
+    elif args.model == 'resnext':
+        classifier = resnext29(num_classes=args.n_classes)
+
+    classifier = classifier.to(args.device)
+    logger.info('Model: {}, # parameters: {}'.format(args.model, cal_parameters(classifier)))
     optimizer = torch.optim.SGD(
         classifier.parameters(),
         args.learning_rate,
@@ -247,6 +275,7 @@ def run(args: DictConfig) -> None:
         nesterov=True)
 
     cudnn.benchmark = True
+    classifier = torch.nn.DataParallel(classifier).to(args.device)
 
     best_acc = 0
     scheduler = torch.optim.lr_scheduler.LambdaLR(
@@ -258,8 +287,10 @@ def run(args: DictConfig) -> None:
             1e-6 / args.learning_rate))
 
     for epoch in range(args.n_epochs):
-        loss, ce_loss, js_loss = train_epoch(classifier, train_loader,  args, optimizer, scheduler)
-        logger.info('Epoch {}, loss:{:.4f}, CE:{:.4f}, JS:{:.4f}'.format(epoch + 1, loss, ce_loss, js_loss))
+        loss, ce_loss, js_loss, acc = train_epoch(classifier, train_loader,  args, optimizer, scheduler)
+        lr = scheduler.get_lr()[0]
+        logger.info('Epoch {}, lr:{:.4f}, loss:{:.4f}, CE:{:.4f}, JS:{:.4f}, Acc:{:.4f}'
+                    .format(epoch + 1, lr, loss, ce_loss, js_loss, acc))
 
         test_loss, test_acc = eval_epoch(classifier, test_loader, args, adversarial=False)
         logger.info('Test loss:{:.4f}, acc:{:.4f}'.format(test_loss, test_acc))

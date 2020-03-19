@@ -12,7 +12,7 @@ hydra:
 # meta parameters
 dataset: cifar10
 data_dir: data
-classifier_name: resnet18 # or resnet34, resnet50
+model: wide_resnet # or resnet34, resnet50
 n_classes: 10
 
 inference: False  # False for training, True for inference.
@@ -33,8 +33,8 @@ optimizer: sgd
 learning_rate: 0.1     # initial learning rate
 momentum: 0.9
 weight_decay: 0.0005   # L2 regularizer
-schedule: [150, 225]   # Decrease learning rate at these epochs.
-gamma: 0.1             # LR is multiplied by gamma on schedule.
+#schedule: [150, 225]   # Decrease learning rate at these epochs.
+#gamma: 0.1             # LR is multiplied by gamma on schedule.
 seed: 1234
 
 epsilon: 8/255
@@ -42,6 +42,6 @@ epsilon_iter: 10/255
 pgd_epsilon_iter: 2/255  # for PGD evaluation
 
 # setting
-n_gpu: 1
+#n_gpu: 1
 device: cuda
 num_workers: 0
