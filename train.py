@@ -125,7 +125,7 @@ def train_epoch(classifier, train_loader, args, optimizer, scheduler):
         loss.backward()
         optimizer.step()
         scheduler.step()
-        break
+
         # loss_ema = loss_ema * 0.9 + float(loss) * 0.1
     return loss_meter.avg, ce_meter.avg, js_meter.avg
 
@@ -182,10 +182,8 @@ def eval_c(classifier, test_data, base_path, args):
             num_workers=args.num_workers,
             pin_memory=True)
 
-        test_loss, test_acc = eval_epoch(classifier, test_loader)
+        test_loss, test_acc = eval_epoch(classifier, test_loader, args)
         corruption_accs.append(test_acc)
-        # print('{}\n\tTest Loss {:.3f} | Test Error {:.3f}'.format(
-        #     corruption, test_loss, 100 - 100. * test_acc))
 
     return np.mean(corruption_accs)
 
