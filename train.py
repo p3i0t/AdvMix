@@ -7,7 +7,7 @@ import numpy as np
 import torch
 import torch.backends.cudnn as cudnn
 import torch.nn.functional as F
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, TensorDataset
 from torchvision import transforms, datasets
 import augmentations
 
@@ -183,16 +183,17 @@ def eval_epoch(model, data_loader, args, adversarial=False):
     return loss_meter.avg, acc_meter.avg
 
 
-def eval_c(classifier, test_data, base_path, args):
+def eval_c(classifier, base_path, args):
     """Evaluate network on given corrupted dataset."""
     corruption_accs = []
     for corruption in CORRUPTIONS:
         # Reference to original data is mutated
-        test_data.data = np.load(base_path + corruption + '.npy')
-        test_data.y = torch.LongTensor(np.load(base_path + 'labels.npy'))
+        x = torch.FloatTensor(np.load(base_path + corruption + '.npy'))
+        y = torch.LongTensor(np.load(base_path + 'labels.npy'))
+        dataset = TensorDataset(x, y)
 
-        test_loader = torch.utils.data.DataLoader(
-            test_data,
+        test_loader = DataLoader(
+            dataset,
             batch_size=args.eval_batch_size,
             shuffle=False,
             num_workers=args.num_workers,
