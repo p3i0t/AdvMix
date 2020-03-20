@@ -182,16 +182,42 @@ def eval_epoch(model, data_loader, args, adversarial=False):
     return loss_meter.avg, acc_meter.avg
 
 
+class CorruptionDataset(Dataset):
+    # for cifar10 and cifar100
+    def __init__(self, x, y, transform=None):
+        assert x.shape[0] == y.shape[0]
+        self.x = x
+        self.y = y
+        self.transform = transform
+
+    def __getitem__(self, item):
+        sample = self.x[item]
+        if self.transform:
+            sample = self.transform(sample)
+        return sample, self.y[item]
+
+    def __len__(self):
+        return self.x.shape[0]
+
+
 def eval_c(classifier, base_path, args):
     """Evaluate network on given corrupted dataset."""
     corruption_accs = []
     for corruption in CORRUPTIONS:
         # Reference to original data is mutated
-        x = torch.FloatTensor(np.load(base_path + corruption + '.npy'))
-        x = transforms.Normalize([mean_] * 3, [std_] * 3)(x).permute(0, 3, 1, 2)
-        y = torch.LongTensor(np.load(base_path + 'labels.npy'))
-        dataset = TensorDataset(x, y)
+        preprocess = transforms.Compose(
+            [transforms.ToTensor(),
+             transforms.Normalize([mean_] * 3, [std_] * 3)])
 
+        x = np.load(base_path + corruption + '.npy')
+        #x = preprocess(x).permute(0, 3, 1, 2)
+        y = np.load(base_path + 'labels.npy')
+        dataset = CorruptionDataset(x, y, transform=preprocess)
+        print(dir(dataset))
+        x_, y_ = dataset[0]
+        print(type(x_), x_.size())
+        print(type(y_), y_.size())
+        exit(0)
         test_loader = DataLoader(
             dataset,
             batch_size=args.eval_batch_size,
