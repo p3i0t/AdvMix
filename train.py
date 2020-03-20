@@ -195,7 +195,7 @@ class CorruptionDataset(Dataset):
         sample = self.x[item]
         if self.transform:
             sample = self.transform(sample)
-        return sample, self.y[item]
+        return sample, torch.LongTensor(self.y[item])
 
     def __len__(self):
         return self.x.shape[0]
