@@ -211,12 +211,57 @@ clip_min = -1.
 clip_max = 1.
 
 
+def attack_pgd(model, x, y, eps, eps_iter, attack_iters, restarts):
+    """
+    Perform PGD attack on one mini-batch.
+    :param model: pytorch model.
+    :param x: x of minibatch.
+    :param y: y of minibatch.
+    :param eps: L-infinite norm budget.
+    :param eps_iter: step size for each iteration.
+    :param attack_iters: number of iterations.
+    :param restarts:  number of restart times
+    :return: best adversarial perturbations delta in all restarts
+    """
+    assert x.device == y.device
+    max_loss = torch.zeros_like(y).float()
+    max_delta = torch.zeros_like(x)
+
+    for i in range(restarts):
+        delta = torch.zeros_like(x).uniform_(-eps, eps)
+        delta.data = clamp(delta, clip_min - x, clip_max - x)
+        delta.requires_grad = True
+
+        for _ in range(attack_iters):
+            logits = model(x + delta)
+            # index = torch.where(output.max(1)[1] == y)
+            index = torch.where(logits.argmax(dim=1) == y)  # get the correct predictions, pgd performed only on them
+            if len(index[0]) == 0:
+                break
+            loss = F.cross_entropy(logits, y)
+            loss.backward()
+
+            # select & update
+            grad = delta.grad.detach()
+            delta_update = (delta[index] + eps_iter * torch.sign(grad[index])).clamp_(-eps, eps)
+            delta_update = clamp(delta_update, clip_min - x[index], clip_max - x[index])
+
+            # write back
+            delta.data[index] = delta_update
+            delta.grad.zero_()
+
+        all_loss = F.cross_entropy(model(x + delta), y, reduction='none').detach()
+        max_delta[all_loss >= max_loss] = delta.detach()[all_loss >= max_loss]
+        max_loss = torch.max(max_loss, all_loss)
+    return max_delta
+
+
 def eval_epoch(model, data_loader, args, adversarial=False):
     """Self-implemented PGD evaluation"""
     eps = eval(args.epsilon) / std_
     eps_iter = eval(args.pgd_epsilon_iter) / std_
-    attack_iters = 50
-    restarts = 2
+    attack_iters = 40
+    restarts = 1
 
     loss_meter = AverageMeter('loss')
     acc_meter = AverageMeter('Acc')
@@ -391,6 +436,9 @@ def run(args: DictConfig) -> None:
 
     test_c_acc = eval_c(classifier, base_c_path, args)
     logger.info('Mean Corruption Error:{:.4f}'.format(test_c_acc))
+
+    adv_loss, adv_acc = eval_epoch(classifier, test_loader, args, adversarial=True)
+    logger.info('Adversarial evaluation, CE:{:.4f}, acc:{:.4f}'.format(adv_loss, adv_acc))
 
 
 if __name__ == '__main__':
