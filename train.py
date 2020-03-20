@@ -307,7 +307,7 @@ def run(args: DictConfig) -> None:
 
                 torch.save(classifier.state_dict(), '{}.pth'.format(args.model))
 
-    test_c_acc = eval_c(classifier, test_data, base_c_path, args)
+    test_c_acc = eval_c(classifier, base_c_path, args)
     logger.info('Mean Corruption Error:{:.4f}'.format(test_c_acc))
 
 
