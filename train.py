@@ -351,7 +351,7 @@ def run(args: DictConfig) -> None:
     classifier = torch.nn.DataParallel(classifier).to(args.device)
 
     if args.inference:
-        classifier.load_state_dict(torch.load('{}.pth'.format(args.model)))
+        classifier.load_state_dict(torch.load('{}_{}.pth'.format(args.model, args.augmentation_type)))
         test_loss, test_acc = eval_epoch(classifier, test_loader, args, adversarial=False)
         logger.info('Clean Test CE:{:.4f}, acc:{:.4f}'.format(test_loss, test_acc))
     else:
@@ -387,7 +387,7 @@ def run(args: DictConfig) -> None:
                 best_acc = test_acc
                 logging.info('===> New optimal, save checkpoint ...')
 
-                torch.save(classifier.state_dict(), '{}.pth'.format(args.model))
+                torch.save(classifier.state_dict(), '{}_{}.pth'.format(args.model, args.augmentation_type))
 
     test_c_acc = eval_c(classifier, base_c_path, args)
     logger.info('Mean Corruption Error:{:.4f}'.format(test_c_acc))
