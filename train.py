@@ -74,7 +74,6 @@ class AugMixDataset(Dataset):
         self.preprocess = preprocess
         self.no_jsd = no_jsd
         self.args = args
-        print(self.args)
 
     def __getitem__(self, i):
         x, y = self.dataset[i]
@@ -189,6 +188,7 @@ def eval_c(classifier, base_path, args):
     for corruption in CORRUPTIONS:
         # Reference to original data is mutated
         x = torch.FloatTensor(np.load(base_path + corruption + '.npy')).permute(0, 3, 1, 2)
+        x = transforms.Normalize([mean_] * 3, [std_] * 3)(x)
         y = torch.LongTensor(np.load(base_path + 'labels.npy'))
         dataset = TensorDataset(x, y)
 
