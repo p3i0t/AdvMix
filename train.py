@@ -147,6 +147,63 @@ def train_epoch(classifier, train_loader, args, optimizer, scheduler):
     return loss_meter.avg, ce_meter.avg, js_meter.avg, acc_meter.avg
 
 
+def train_epoch_advmix(classifier, train_loader, args, optimizer, scheduler):
+    """Train for one epoch."""
+    classifier.train()
+    loss_meter = AverageMeter('loss')
+    ce_meter = AverageMeter('ce_loss')
+    js_meter = AverageMeter('js_loss')
+    acc_meter = AverageMeter('acc_loss')
+
+    # ajust according to std.
+    eps = eval(args.epsilon) / std_
+    eps_iter = eval(args.epsilon_iter) / std_
+
+    for i, (x, y) in enumerate(train_loader):
+        optimizer.zero_grad()
+        x = torch.cat(x, 0).to(args.device)
+        y = y.to(args.device)
+
+        # start with uniform noise
+        delta = torch.zeros_like(x).uniform_(-eps, eps)
+        delta.requires_grad_()
+        delta = clamp(delta, clip_min - x, clip_max - x)
+
+        loss = F.cross_entropy(classifier(x + delta), y)
+        grad_delta = torch.autograd.grad(loss, delta)[0].detach()  # get grad of noise
+
+        # update delta with grad
+        delta = (delta + torch.sign(grad_delta) * eps_iter).clamp_(-eps, eps)
+        delta = clamp(delta, clip_min - x, clip_max - x)
+
+        x_ = torch.cat([x, x + delta], dim=0)
+
+        logits_list = torch.split(classifier(x_), y.size(0))
+        # logits_clean, logits_aug1, logits_aug2, logits_clean_adv， logits_aug1_adv, logits_aug2_adv
+
+        # Cross-entropy is only computed on clean images
+        ce_loss = F.cross_entropy(logits_list[0], y)
+
+        prob_list = [logits.softmax(dim=1) for logits in logits_list]
+        js_loss = jason_shanon_loss(prob_list)
+
+        loss = ce_loss + 12 * js_loss
+
+        loss_meter.update(loss.item(), x[0].size(0))
+        ce_meter.update(ce_loss.item(), x[0].size(0))
+        js_meter.update(js_loss.item(), x[0].size(0))
+
+        acc = (logits_list[0].argmax(dim=1) == y).float().mean().item()
+        acc_meter.update(acc, x[0].size(0))
+
+        loss.backward()
+        optimizer.step()
+        scheduler.step()
+
+        # loss_ema = loss_ema * 0.9 + float(loss) * 0.1
+    return loss_meter.avg, ce_meter.avg, js_meter.avg, acc_meter.avg
+
+
 # Note that we don't use cifar10 specific normalization, so generally use 0.5 as mean and std.
 mean_ = 0.5
 std_ = 0.5
@@ -315,7 +372,11 @@ def run(args: DictConfig) -> None:
                 1e-6 / args.learning_rate))
 
         for epoch in range(args.n_epochs):
-            loss, ce_loss, js_loss, acc = train_epoch(classifier, train_loader,  args, optimizer, scheduler)
+            if args.augmentation_type:
+                loss, ce_loss, js_loss, acc = train_epoch_advmix(classifier, train_loader,  args, optimizer, scheduler)
+            else:
+                loss, ce_loss, js_loss, acc = train_epoch(classifier, train_loader,  args, optimizer, scheduler)
+
             lr = scheduler.get_lr()[0]
             logger.info('Epoch {}, lr:{:.4f}, loss:{:.4f}, CE:{:.4f}, JS:{:.4f}, Acc:{:.4f}'
                         .format(epoch + 1, lr, loss, ce_loss, js_loss, acc))

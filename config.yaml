@@ -17,6 +17,8 @@ n_classes: 10
 
 inference: False  # False for training, True for inference.
 
+augmentation_type: advmix  # augmix or normal
+
 # AdvMix options
 mixture_width: 3           # width of per augment chain
 mixture_depth: -1          # depth of augment chains.
