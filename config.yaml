@@ -12,7 +12,7 @@ hydra:
 # meta parameters
 dataset: cifar10
 data_dir: data
-model: wide_resnet # or resnet34, resnet50
+model: wide_resnet
 n_classes: 10
 
 inference: False  # False for training, True for inference.

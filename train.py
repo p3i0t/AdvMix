@@ -187,8 +187,8 @@ def eval_c(classifier, base_path, args):
     corruption_accs = []
     for corruption in CORRUPTIONS:
         # Reference to original data is mutated
-        x = torch.FloatTensor(np.load(base_path + corruption + '.npy')).permute(0, 3, 1, 2)
-        x = transforms.Normalize([mean_] * 3, [std_] * 3)(x)
+        x = torch.FloatTensor(np.load(base_path + corruption + '.npy'))
+        x = transforms.Normalize([mean_] * 3, [std_] * 3)(x).permute(0, 3, 1, 2)
         y = torch.LongTensor(np.load(base_path + 'labels.npy'))
         dataset = TensorDataset(x, y)
 
