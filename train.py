@@ -169,7 +169,7 @@ def train_epoch_advmix(classifier, train_loader, args, optimizer, scheduler):
         delta.requires_grad_()
         delta = clamp(delta, clip_min - x, clip_max - x)
 
-        loss = F.cross_entropy(classifier(x + delta), y)
+        loss = F.cross_entropy(classifier(x + delta), torch.cat([y]*3, dim=0))
         grad_delta = torch.autograd.grad(loss, delta)[0].detach()  # get grad of noise
 
         # update delta with grad
