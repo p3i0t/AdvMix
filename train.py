@@ -210,14 +210,9 @@ def eval_c(classifier, base_path, args):
              transforms.Normalize([mean_] * 3, [std_] * 3)])
 
         x = np.load(base_path + corruption + '.npy')
-        #x = preprocess(x).permute(0, 3, 1, 2)
-        y = np.load(base_path + 'labels.npy')
+        y = np.load(base_path + 'labels.npy').astype(np.int64)
         dataset = CorruptionDataset(x, y, transform=preprocess)
-        print(dir(dataset))
-        x_, y_ = dataset[0]
-        print(type(x_), x_.size())
-        print(type(y_), y_.size())
-        exit(0)
+
         test_loader = DataLoader(
             dataset,
             batch_size=args.eval_batch_size,
