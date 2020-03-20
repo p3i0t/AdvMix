@@ -267,38 +267,44 @@ def run(args: DictConfig) -> None:
 
     classifier = classifier.to(args.device)
     logger.info('Model: {}, # parameters: {}'.format(args.model, cal_parameters(classifier)))
-    optimizer = torch.optim.SGD(
-        classifier.parameters(),
-        args.learning_rate,
-        momentum=args.momentum,
-        weight_decay=args.weight_decay,
-        nesterov=True)
 
     cudnn.benchmark = True
     classifier = torch.nn.DataParallel(classifier).to(args.device)
 
-    best_acc = 0
-    scheduler = torch.optim.lr_scheduler.LambdaLR(
-        optimizer,
-        lr_lambda=lambda step: get_lr(  # pylint: disable=g-long-lambda
-            step,
-            args.n_epochs * len(train_loader),
-            1,  # lr_lambda computes multiplicative factor
-            1e-6 / args.learning_rate))
-
-    for epoch in range(args.n_epochs):
-        loss, ce_loss, js_loss, acc = train_epoch(classifier, train_loader,  args, optimizer, scheduler)
-        lr = scheduler.get_lr()[0]
-        logger.info('Epoch {}, lr:{:.4f}, loss:{:.4f}, CE:{:.4f}, JS:{:.4f}, Acc:{:.4f}'
-                    .format(epoch + 1, lr, loss, ce_loss, js_loss, acc))
-
+    if args.inference:
+        classifier.load_state_dict(torch.load('{}.pth'.format(args.model)))
         test_loss, test_acc = eval_epoch(classifier, test_loader, args, adversarial=False)
-        logger.info('Test loss:{:.4f}, acc:{:.4f}'.format(test_loss, test_acc))
-        if test_acc > best_acc:
-            best_acc = test_acc
-            logging.info('===> New optimal, save checkpoint ...')
+        logger.info('Clean Test CE:{:.4f}, acc:{:.4f}'.format(test_loss, test_acc))
+    else:
+        optimizer = torch.optim.SGD(
+            classifier.parameters(),
+            args.learning_rate,
+            momentum=args.momentum,
+            weight_decay=args.weight_decay,
+            nesterov=True)
 
-            torch.save(classifier.state_dict(), '{}.pth'.format(args.classifier_name))
+        best_acc = 0
+        scheduler = torch.optim.lr_scheduler.LambdaLR(
+            optimizer,
+            lr_lambda=lambda step: get_lr(  # pylint: disable=g-long-lambda
+                step,
+                args.n_epochs * len(train_loader),
+                1,  # lr_lambda computes multiplicative factor
+                1e-6 / args.learning_rate))
+
+        for epoch in range(args.n_epochs):
+            loss, ce_loss, js_loss, acc = train_epoch(classifier, train_loader,  args, optimizer, scheduler)
+            lr = scheduler.get_lr()[0]
+            logger.info('Epoch {}, lr:{:.4f}, loss:{:.4f}, CE:{:.4f}, JS:{:.4f}, Acc:{:.4f}'
+                        .format(epoch + 1, lr, loss, ce_loss, js_loss, acc))
+
+            test_loss, test_acc = eval_epoch(classifier, test_loader, args, adversarial=False)
+            logger.info('Test CE:{:.4f}, acc:{:.4f}'.format(test_loss, test_acc))
+            if test_acc > best_acc:
+                best_acc = test_acc
+                logging.info('===> New optimal, save checkpoint ...')
+
+                torch.save(classifier.state_dict(), '{}.pth'.format(args.model))
 
     test_c_acc = eval_c(classifier, test_data, base_c_path, args)
     logger.info('Mean Corruption Error:{:.4f}'.format(test_c_acc))
