@@ -409,6 +409,7 @@ def run(args: DictConfig) -> None:
             nesterov=True)
 
         best_acc = 0
+        pre_adv_acc = 0
         scheduler = torch.optim.lr_scheduler.LambdaLR(
             optimizer,
             lr_lambda=lambda step: get_lr(  # pylint: disable=g-long-lambda
@@ -435,8 +436,11 @@ def run(args: DictConfig) -> None:
 
             if test_acc > best_acc:
                 best_acc = test_acc
+                if adv_acc + 0.1 <= pre_adv_acc:
+                    pre_adv_acc = adv_acc
+                    logger.info("Catastrophic overfitting happens, early stopping")
+                    break
                 logging.info('===> New optimal, save checkpoint ...')
-
                 torch.save(classifier.state_dict(), '{}_{}.pth'.format(args.model, args.augmentation_type))
 
     test_c_acc = eval_c(classifier, base_c_path, args)
