@@ -429,6 +429,10 @@ def run(args: DictConfig) -> None:
 
             test_loss, test_acc = eval_epoch(classifier, test_loader, args, adversarial=False)
             logger.info('Test CE:{:.4f}, acc:{:.4f}'.format(test_loss, test_acc))
+            if epoch > 10 and epoch % 2 == 0:
+                adv_loss, adv_acc = eval_epoch(classifier, test_loader, args, adversarial=True)
+                logger.info('Adversarial evaluation, CE:{:.4f}, acc:{:.4f}'.format(adv_loss, adv_acc))
+
             if test_acc > best_acc:
                 best_acc = test_acc
                 logging.info('===> New optimal, save checkpoint ...')
@@ -437,9 +441,6 @@ def run(args: DictConfig) -> None:
 
     test_c_acc = eval_c(classifier, base_c_path, args)
     logger.info('Mean Corruption Error:{:.4f}'.format(test_c_acc))
-
-    adv_loss, adv_acc = eval_epoch(classifier, test_loader, args, adversarial=True)
-    logger.info('Adversarial evaluation, CE:{:.4f}, acc:{:.4f}'.format(adv_loss, adv_acc))
 
 
 if __name__ == '__main__':
