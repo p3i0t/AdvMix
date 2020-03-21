@@ -430,11 +430,9 @@ def run(args: DictConfig) -> None:
 
             test_loss, test_acc = eval_epoch(classifier, test_loader, args, adversarial=False)
             logger.info('Test CE:{:.4f}, acc:{:.4f}'.format(test_loss, test_acc))
-            if epoch > 10 and epoch % 2 == 0:
-                adv_loss, adv_acc = eval_epoch(classifier, test_loader, args, adversarial=True)
-                logger.info('Adversarial evaluation, CE:{:.4f}, acc:{:.4f}'.format(adv_loss, adv_acc))
-            else:
-                adv_acc = 0.
+
+            adv_loss, adv_acc = eval_epoch(classifier, test_loader, args, adversarial=True)
+            logger.info('Adversarial evaluation, CE:{:.4f}, acc:{:.4f}'.format(adv_loss, adv_acc))
 
             if test_acc > best_acc:
                 best_acc = test_acc
