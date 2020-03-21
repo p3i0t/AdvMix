@@ -433,10 +433,12 @@ def run(args: DictConfig) -> None:
             if epoch > 10 and epoch % 2 == 0:
                 adv_loss, adv_acc = eval_epoch(classifier, test_loader, args, adversarial=True)
                 logger.info('Adversarial evaluation, CE:{:.4f}, acc:{:.4f}'.format(adv_loss, adv_acc))
+            else:
+                adv_acc = 0.
 
             if test_acc > best_acc:
                 best_acc = test_acc
-                if adv_acc + 0.1 <= pre_adv_acc:
+                if adv_acc + 0.1 < pre_adv_acc:
                     pre_adv_acc = adv_acc
                     logger.info("Catastrophic overfitting happens, early stopping")
                     break
