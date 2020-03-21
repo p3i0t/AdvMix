@@ -185,7 +185,10 @@ def train_epoch_advmix(classifier, train_loader, args, optimizer, scheduler):
         ce_loss = F.cross_entropy(logits_list[0], y)
 
         prob_list = [logits.softmax(dim=1) for logits in logits_list]
-        js_loss = jason_shanon_loss(prob_list)
+        js_loss = jason_shanon_loss(prob_list[:3]) \
+                  + jason_shanon_loss([prob_list[0], prob_list[3]])\
+                  + jason_shanon_loss([prob_list[1], prob_list[4]])\
+                  + jason_shanon_loss([prob_list[2], prob_list[5]])
 
         loss = ce_loss + 12 * js_loss
 
@@ -335,8 +338,6 @@ def get_lr(step, total_steps, lr_max, lr_min):
 
 @hydra.main(config_path='config.yaml')
 def run(args: DictConfig) -> None:
-
-    # print(args)
     # Load datasets
     train_transform = transforms.Compose(
         [transforms.RandomHorizontalFlip(),
